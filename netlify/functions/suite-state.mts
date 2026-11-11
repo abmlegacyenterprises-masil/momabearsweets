@@ -18,6 +18,22 @@ export default async (req: Request) => {
       const data = (row?.data || {}) as Record<string, unknown>;
       return reply({revision: row?.revision || 0, data: Object.fromEntries((admin ? keys : publicKeys).filter(k => k in data).map(k => [k, data[k]]))});
     }
+    if (req.method === 'POST') {
+      verifyRequestOrigin(req);
+      if (!admin) return reply({error: 'Unlock the Suite again to import backup data.'}, 401);
+      const backupHost = 'momabearsweets-backup.netlify.app';
+      const upstream = await fetch(`https://${backupHost}/.netlify/functions/suite-state`, {headers: {'Cache-Control': 'no-store'}});
+      if (!upstream.ok) return reply({error: 'Unable to reach backup site.'}, 502);
+      const backup = await upstream.json();
+      if (!backup?.data || typeof backup.data !== 'object') return reply({error: 'Invalid backup data.'}, 502);
+      const imported = Object.fromEntries(keys.filter(k => k in backup.data).map(k => [k, backup.data[k]]));
+      await db.insert(suiteState).values({id: 1}).onConflictDoNothing();
+      const [current] = await db.select().from(suiteState).where(eq(suiteState.id, 1));
+      const merged = {...((current?.data as Record<string, unknown>) || {}), ...imported};
+      const [saved] = await db.update(suiteState).set({data: merged, revision: sql`${suiteState.revision} + 1`}).where(eq(suiteState.id, 1)).returning({revision: suiteState.revision});
+      if (!saved) return reply({error: 'Unable to save imported backup.'}, 503);
+      return reply({revision: saved.revision});
+    }
     if (req.method !== 'PUT') return reply({error: 'Method not allowed'}, 405);
     verifyRequestOrigin(req);
     if (!admin) return reply({error: 'Unlock the Suite again to save your changes.'}, 401);
