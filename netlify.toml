@@ -1,0 +1,2 @@
+[functions.gallery-auth]
+  included_files = ["index.html"]
