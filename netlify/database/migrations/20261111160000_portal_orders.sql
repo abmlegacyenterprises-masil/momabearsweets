@@ -1,4 +1,4 @@
-CREATE TABLE "portal_orders" (
+CREATE TABLE IF NOT EXISTS "portal_orders" (
 	"id" text PRIMARY KEY,
 	"order" jsonb NOT NULL,
 	"profile" jsonb DEFAULT '{}' NOT NULL,
