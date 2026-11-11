@@ -21,8 +21,24 @@ export default async (req: Request) => {
     if (req.method === 'POST') {
       verifyRequestOrigin(req);
       if (!admin) return reply({error: 'Unlock the Suite again to import backup data.'}, 401);
+      const body = await req.json().catch(() => ({}));
       const backupHost = 'momabearsweets-backup.netlify.app';
-      const upstream = await fetch(`https://${backupHost}/.netlify/functions/suite-state`, {headers: {'Cache-Control': 'no-store'}});
+      const backupOrigin = `https://${backupHost}`;
+      let cookie = '';
+      if (typeof body?.password === 'string' && body.password) {
+        const authRes = await fetch(`${backupOrigin}/.netlify/functions/gallery-auth`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'Origin': backupOrigin},
+          body: JSON.stringify({password: body.password})
+        });
+        if (!authRes.ok) return reply({error: 'Incorrect backup Suite password. Please try again.'}, 401);
+        const setCookie = authRes.headers.get('set-cookie') || '';
+        const match = setCookie.match(/gallery_session=[^;]+/);
+        if (match) cookie = match[0];
+      }
+      const upstream = await fetch(`${backupOrigin}/.netlify/functions/suite-state`, {
+        headers: {'Cache-Control': 'no-store', ...(cookie ? {'Cookie': cookie} : {})}
+      });
       if (!upstream.ok) return reply({error: 'Unable to reach backup site.'}, 502);
       const backup = await upstream.json();
       if (!backup?.data || typeof backup.data !== 'object') return reply({error: 'Invalid backup data.'}, 502);
@@ -32,7 +48,11 @@ export default async (req: Request) => {
       const merged = {...((current?.data as Record<string, unknown>) || {}), ...imported};
       const [saved] = await db.update(suiteState).set({data: merged, revision: sql`${suiteState.revision} + 1`}).where(eq(suiteState.id, 1)).returning({revision: suiteState.revision});
       if (!saved) return reply({error: 'Unable to save imported backup.'}, 503);
-      return reply({revision: saved.revision});
+      return reply({
+        revision: saved.revision,
+        customersCount: Array.isArray(merged.customers) ? merged.customers.length : 0,
+        ordersCount: Array.isArray(merged.orders) ? merged.orders.length : 0
+      });
     }
     if (req.method !== 'PUT') return reply({error: 'Method not allowed'}, 405);
     verifyRequestOrigin(req);
