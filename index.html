@@ -564,7 +564,8 @@
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div class="space-y-1">
             <div class="flex flex-wrap items-center gap-2">
-              <button id="btnSwitchCustomer" type="button" title="Lock Suite and return to Customer Portal" aria-label="MomaBear's Suite Unlocked — lock and return to Customer Portal" class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-xs font-bold border border-emerald-400/30 transition">🔓 MomaBear's Suite Unlocked</button>
+              <button id="btnSwitchCustomer" type="button" title="Lock Suite and return to Customer Portal" aria-label="MomaBear's Suite Unlocked — lock and return to Customer Portal" class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-xs font-bold border border-emerald-400/30 transition">🔓 MomaBear's Suite Unlocked</button> <button type="button" id="btnImportBackupData" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 text-white hover:bg-amber-600 shadow-sm transition">📥 Import Backup Menu &amp; Photos</button>
+              
               <span class="text-xs text-amber-200">Click to lock and return to Customer Portal</span>
             </div>
             <h2 class="font-display text-xl sm:text-3xl font-bold">MomaBear's Cottage Bakery Command Suite</h2>
@@ -2284,7 +2285,25 @@
       } finally { sharedSaving = false; }
       if (succeeded && sharedDirty) { flushShared(); return; }
       if (sharedDirty && !sharedConflict) saveNotice('Not saved online. Keep this page open and click Retry save.');
-    }
+    } 
+    document.getElementById('btnImportBackupData')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btnImportBackupData');
+if (!btn || btn.disabled) return;
+      if (!confirm('Import the latest menu, photos, add-ons, and settings from momabearsweets-backup.netlify.app?')) return;
+const orig = btn.textContent;
+btn.disabled = true;
+btn.textContent = 'Importing...';
+try {
+  await suiteRequest('/.netlify/functions/suite-state', { method: 'POST' });
+  await loadShared(true);
+  saveNotice('Backup imported & saved online!');
+} catch (err) {
+  saveNotice(err?.message || 'Unable to import backup.');
+} finally {
+  btn.disabled = false;
+  btn.textContent = orig;
+}
+});
     function renderHiddenItems() {
       const list = document.getElementById('hiddenItemsList');
       list.replaceChildren();
