@@ -2289,14 +2289,19 @@
     document.getElementById('btnImportBackupData')?.addEventListener('click', async () => {
       const btn = document.getElementById('btnImportBackupData');
 if (!btn || btn.disabled) return;
-      if (!confirm('Import the latest menu, photos, add-ons, and settings from momabearsweets-backup.netlify.app?')) return;
+     const password = window.prompt("Enter your MomaBear's Suite owner password to import all 12 customers, orders, inventory, and menu photos from momabearsweets-backup.netlify.app:");
+      if (password === null) return;
 const orig = btn.textContent;
 btn.disabled = true;
 btn.textContent = 'Importing...';
 try {
-  await suiteRequest('/.netlify/functions/suite-state', { method: 'POST' });
+  const res = await suiteRequest('/.netlify/functions/suite-state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password })
+     }); 
   await loadShared(true);
-  saveNotice('Backup imported & saved online!');
+  saveNotice(`Full backup imported! (${res.customersCount ?? 0} customers, ${res.ordersCount ?? 0} orders)`);
 } catch (err) {
   saveNotice(err?.message || 'Unable to import backup.');
 } finally {
