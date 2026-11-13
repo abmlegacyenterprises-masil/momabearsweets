@@ -60,7 +60,68 @@ export default async (req: Request) => {
       if (!photo.imageKey.startsWith('/assets/menu/')) await store.delete(photo.imageKey);
       return respond({ ok: true });
     }
-    if (req.method !== 'POST') return respond({ error: 'Method not allowed.' }, 405);
+    if (req.method === 'PUT') {
+const body = await req.json().catch(() => ({}));
+const backupHost = 'momabearsweets-backup.netlify.app';
+const backupOrigin = `https://${backupHost}`;
+if (body.action === 'list') {
+let cookie = '';
+if (typeof body.password === 'string' && body.password) {
+const authRes = await fetch(`${backupOrigin}/.netlify/functions/gallery-auth`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'Origin': backupOrigin },
+body: JSON.stringify({ password: body.password })
+});
+if (authRes.ok) {
+const match = (authRes.headers.get('set-cookie') || '').match(/gallery_session=[^;]+/);
+if (match) cookie = match[0];
+}
+}
+const galRes = await fetch(`${backupOrigin}/.netlify/functions/sweets-gallery${cookie ? '?owner=1' : ''}`, {
+headers: { 'Cache-Control': 'no-store', ...(cookie ? { 'Cookie': cookie } : {}) }
+});
+if (!galRes.ok) return respond({ error: 'Unable to load backup gallery list.' }, 502);
+const galJson = await galRes.json();
+return respond({ photos: Array.isArray(galJson?.photos) ? galJson.photos : [], cookie });
+}
+if (body.action === 'clear') {
+const existing = await db.select().from(galleryPhotos);
+await db.delete(galleryPhotos);
+for (const old of existing) {
+if (!old.imageKey.startsWith('/assets/menu/')) await store.delete(old.imageKey).catch(() => {});
+}
+return respond({ ok: true });
+}
+if (body.action === 'importOne' && body.photo?.id) {
+const p = body.photo;
+const imgRes = await fetch(`${backupOrigin}/.netlify/functions/sweets-gallery?id=${encodeURIComponent(p.id)}`, {
+headers: body.cookie ? { 'Cookie': String(body.cookie) } : {},
+redirect: 'follow'
+});
+if (!imgRes.ok) return respond({ error: 'Unable to fetch photo.' }, 502);
+const contentType = (imgRes.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
+const bytes = await imgRes.arrayBuffer();
+const imageKey = crypto.randomUUID();
+await store.set(imageKey, bytes);
+const values = {
+id: String(p.id),
+title: String(p.title || 'Sweets Photo').slice(0, 120),
+caption: String(p.caption || '').slice(0, 1200),
+published: p.published !== false,
+position: Number.isInteger(p.position) ? Number(p.position) : 0,
+imageKey,
+contentType
+};
+await db.insert(galleryPhotos).values(values).onConflictDoUpdate({
+target: galleryPhotos.id,
+set: { title: values.title, caption: values.caption, published: values.published, position: values.position, imageKey: values.imageKey, contentType: values.contentType }
+});
+return respond({ ok: true });
+}
+return respond({ error: 'Invalid gallery sync action.' }, 400);
+}
+
+if (req.method !== 'POST') return respond({ error: 'Method not allowed.' }, 405);
     const form = await req.formData();
     const title = String(form.get('title') || '').trim();
     const caption = String(form.get('caption') || '').trim();
