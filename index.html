@@ -2302,7 +2302,8 @@ try {
     body: JSON.stringify({ password })
      }); 
   await loadShared(true);
-  saveNotice(`Full backup imported! (${res.customersCount ?? 0} customers, ${res.ordersCount ?? 0} orders)`);
+  saveNotice(`Full backup imported! (${res.customersCount ?? 0} customers, ${res.ordersCount ?? 0} orders, ${res.galleryCount ?? 0} gallery photos)`);
+  setTimeout(() => location.reload(), 1200);
 } catch (err) {
   saveNotice(err?.message || 'Unable to import backup.');
 } finally {
