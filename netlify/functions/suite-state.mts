@@ -52,7 +52,7 @@ return reply({
         revision: saved.revision,
         customersCount: Array.isArray(merged.customers) ? merged.customers.length : 0,
         ordersCount: Array.isArray(merged.orders) ? merged.orders.length : 0
-);
+});
     }
     if (req.method !== 'PUT') return reply({error: 'Method not allowed'}, 405);
     verifyRequestOrigin(req);
