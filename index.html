@@ -554,7 +554,6 @@
         <button id="btnChangeOwnerPassword" type="button" class="rounded-xl border border-bear-400 px-4 py-2 font-bold hover:bg-bear-100 transition">
           🔑 Change Suite Password <span id="currentPassIndicator" class="hidden"></span>
         </button>
-        <button type="button" id="btnImportBackupData" class="rounded-xl border border-bear-400 px-4 py-2 font-bold hover:bg-bear-100 transition">📥 Import Backup Menu &amp; Photos</button>
         <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-3 space-y-2">
           <details><summary class="font-bold cursor-pointer">Recently deleted items — restore or hide</summary><div id="deletedItemsList"></div></details>
         </div>
@@ -2287,57 +2286,6 @@
       if (succeeded && sharedDirty) { flushShared(); return; }
       if (sharedDirty && !sharedConflict) saveNotice('Not saved online. Keep this page open and click Retry save.');
     } 
-    document.getElementById('btnImportBackupData')?.addEventListener('click', async () => {
-      const btn = document.getElementById('btnImportBackupData');
-if (!btn || btn.disabled) return;
-     const password = window.prompt("Enter your MomaBear's Suite owner password to import all customers, orders, inventory, menu photos, and Sweets Gallery photos from momabearsweets-backup.netlify.app:");
-      if (password === null) return;
-const orig = btn.textContent;
-btn.disabled = true;
-btn.textContent = 'Importing menu & customers...';
-try {
-  const res = await suiteRequest('/.netlify/functions/suite-state', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password })
-     }); 
-  await loadShared(true);
-    btn.textContent = 'Loading backup gallery...';
-    const gal = await suiteRequest('/.netlify/functions/sweets-gallery', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'list', password })
-    });
-    const photos = Array.isArray(gal.photos) ? gal.photos : [];
-    let importedGallery = 0;
-    if (photos.length > 0) {
-      await suiteRequest('/.netlify/functions/sweets-gallery', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'clear' })
-      });
-      for (let i = 0; i < photos.length; i += 3) {
-        const batch = photos.slice(i, i + 3);
-        const results = await Promise.all(batch.map(photo =>
-          suiteRequest('/.netlify/functions/sweets-gallery', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'importOne', photo, cookie: gal.cookie || '' })
-          }).then(() => 1).catch(() => 0)
-        ));
-        importedGallery += results.reduce((a, b) => a + b, 0);
-        btn.textContent = `Importing gallery (${Math.min(i + batch.length, photos.length)} / ${photos.length})...`;
-      }
-    }
-  saveNotice(`Full backup imported! (${res.customersCount ?? 0} customers, ${res.ordersCount ?? 0} orders, ${importedGallery} gallery photos)`);
-  setTimeout(() => location.reload(), 1200);
-} catch (err) {
-  saveNotice(err?.message || 'Unable to import backup.');
-} finally {
-  btn.disabled = false;
-  btn.textContent = orig;
-}
-});
     function renderHiddenItems() {
       const list = document.getElementById('hiddenItemsList');
       list.replaceChildren();
