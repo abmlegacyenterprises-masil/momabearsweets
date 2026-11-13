@@ -2290,11 +2290,11 @@
     document.getElementById('btnImportBackupData')?.addEventListener('click', async () => {
       const btn = document.getElementById('btnImportBackupData');
 if (!btn || btn.disabled) return;
-     const password = window.prompt("Enter your MomaBear's Suite owner password to import all 12 customers, orders, inventory, and menu photos from momabearsweets-backup.netlify.app:");
+     const password = window.prompt("Enter your MomaBear's Suite owner password to import all customers, orders, inventory, menu photos, and Sweets Gallery photos from momabearsweets-backup.netlify.app:");
       if (password === null) return;
 const orig = btn.textContent;
 btn.disabled = true;
-btn.textContent = 'Importing...';
+btn.textContent = 'Importing menu & customers...';
 try {
   const res = await suiteRequest('/.netlify/functions/suite-state', {
     method: 'POST',
@@ -2302,7 +2302,34 @@ try {
     body: JSON.stringify({ password })
      }); 
   await loadShared(true);
-  saveNotice(`Full backup imported! (${res.customersCount ?? 0} customers, ${res.ordersCount ?? 0} orders, ${res.galleryCount ?? 0} gallery photos)`);
+    btn.textContent = 'Loading backup gallery...';
+    const gal = await suiteRequest('/.netlify/functions/sweets-gallery', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list', password })
+    });
+    const photos = Array.isArray(gal.photos) ? gal.photos : [];
+    let importedGallery = 0;
+    if (photos.length > 0) {
+      await suiteRequest('/.netlify/functions/sweets-gallery', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clear' })
+      });
+      for (let i = 0; i < photos.length; i += 3) {
+        const batch = photos.slice(i, i + 3);
+        const results = await Promise.all(batch.map(photo =>
+          suiteRequest('/.netlify/functions/sweets-gallery', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'importOne', photo, cookie: gal.cookie || '' })
+          }).then(() => 1).catch(() => 0)
+        ));
+        importedGallery += results.reduce((a, b) => a + b, 0);
+        btn.textContent = `Importing gallery (${Math.min(i + batch.length, photos.length)} / ${photos.length})...`;
+      }
+    }
+  saveNotice(`Full backup imported! (${res.customersCount ?? 0} customers, ${res.ordersCount ?? 0} orders, ${importedGallery} gallery photos)`);
   setTimeout(() => location.reload(), 1200);
 } catch (err) {
   saveNotice(err?.message || 'Unable to import backup.');
