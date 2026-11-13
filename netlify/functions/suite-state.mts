@@ -1,8 +1,7 @@
 import { drizzle } from 'drizzle-orm/netlify-db';
 import { and, eq, sql } from 'drizzle-orm';
 import { verifyRequestOrigin } from '@netlify/identity';
-import { getStore } from '@netlify/blobs';
-import {galleryPhotos,  suiteState } from '../../db/schema.js';
+import { suiteState } from '../../db/schema.js';
 import { hasGallerySession } from '../lib/gallery-session.js';
 import { mergePortalOrders } from '../lib/portal-orders.js';
 const keys = ['products', 'addons', 'fuelConfig', 'lockoutDates', 'inventory', 'customers', 'orders', 'idleMinutes', 'hiddenItems', 'deletedItemsStack', 'menuLabels'];
@@ -49,57 +48,11 @@ export default async (req: Request) => {
       const merged = {...((current?.data as Record<string, unknown>) || {}), ...imported};
       const [saved] = await db.update(suiteState).set({data: merged, revision: sql`${suiteState.revision} + 1`}).where(eq(suiteState.id, 1)).returning({revision: suiteState.revision});
       if (!saved) return reply({error: 'Unable to save imported backup.'}, 503);
-      let galleryCount = 0;
-const galRes = await fetch(`${backupOrigin}/.netlify/functions/sweets-gallery${cookie ? '?owner=1' : ''}`, {
-headers: {'Cache-Control': 'no-store', ...(cookie ? {'Cookie': cookie} : {})}
-});
-if (galRes.ok) {
-const galJson = await galRes.json().catch(() => null);
-const backupPhotos = Array.isArray(galJson?.photos) ? galJson.photos : [];
-if (backupPhotos.length > 0) {
-const store = getStore('sweets-gallery-images');
-const existing = await db.select().from(galleryPhotos);
-const newRows: Array<{id: string; title: string; caption: string; published: boolean; position: number; imageKey: string; contentType: string}> = [];
-for (let i = 0; i < backupPhotos.length; i += 6) {
-const batch = backupPhotos.slice(i, i + 6);
-const fetched = await Promise.all(batch.map(async (p: {id: string; title: string; caption?: string; published?: boolean; position?: number}, idx: number) => {
-const imgRes = await fetch(`${backupOrigin}/.netlify/functions/sweets-gallery?id=${encodeURIComponent(p.id)}`, {
-headers: cookie ? {'Cookie': cookie} : {},
-redirect: 'follow'
-});
-if (!imgRes.ok) return null;
-const contentType = (imgRes.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
-const bytes = await imgRes.arrayBuffer();
-const imageKey = crypto.randomUUID();
-await store.set(imageKey, bytes);
-return {
-id: p.id,
-title: String(p.title || 'Sweets Photo').slice(0, 120),
-caption: String(p.caption || '').slice(0, 1200),
-published: p.published !== false,
-position: Number.isInteger(p.position) ? Number(p.position) : i + idx,
-imageKey,
-contentType
-};
-}));
-for (const row of fetched) if (row) newRows.push(row);
-}
-if (newRows.length > 0) {
-await db.delete(galleryPhotos);
-await db.insert(galleryPhotos).values(newRows);
-for (const old of existing) {
-if (!old.imageKey.startsWith('/assets/menu/')) await store.delete(old.imageKey).catch(() => {});
-}
-galleryCount = newRows.length;
-}
-}
-}
 return reply({
         revision: saved.revision,
         customersCount: Array.isArray(merged.customers) ? merged.customers.length : 0,
-        ordersCount: Array.isArray(merged.orders) ? merged.orders.length : 0,
-galleryCount
-      });
+        ordersCount: Array.isArray(merged.orders) ? merged.orders.length : 0
+);
     }
     if (req.method !== 'PUT') return reply({error: 'Method not allowed'}, 405);
     verifyRequestOrigin(req);
